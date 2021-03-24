@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+
+<robot name="mmrobot" xmlns:xacro="https://www.ros.org/wiki/xacro" >
+  <xacro:arg name="hardware_interface" default="PositionJointInterface"/>
+  <xacro:arg name="robot_name" default="iiwa"/>
+  <xacro:arg name="origin_xyz" default="0 0 0"/>
+  <xacro:arg name="origin_rpy" default="0 0 0"/>
+
+  <link name="world"/>
+
+  <!--iiwa14-->
+  <!-- Import Rviz colors -->
+  <xacro:include filename="$(find iiwa_description)/urdf/materials.xacro" />
+  <!--Import the lbr iiwa macro -->
+  <xacro:include filename="$(find iiwa_description)/urdf/iiwa14.xacro"/>
+  <xacro:iiwa14 hardware_interface="$(arg hardware_interface)" robot_name="$(arg robot_name)" parent="world">
+    <origin xyz="$(arg origin_xyz)" rpy="$(arg origin_rpy)" />
+  </xacro:iiwa14>
+
+  <!--plug-->
+  <xacro:include filename="$(find plug_description)/urdf/plug.urdf.xacro"/>
+  <xacro:plug parent="iiwa_link_ee">
+    <origin xyz="-0.011 -0.011 0" rpy="0 0 1.57" />
+  </xacro:plug>
+
+  <!--camera-->
+  <xacro:include filename="$(find plug_description)/urdf/camera.urdf.xacro"/>
+  <xacro:rpi parent="iiwa_link_ee">
+    <origin xyz="-0.03 0 0.05" rpy="0 -1.57 0" />
+  </xacro:rpi>
+
+</robot>

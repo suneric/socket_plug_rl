@@ -1,0 +1,33 @@
+<?xml version="1.0" ?>
+<robot xmlns:xacro="https://www.ros.org/wiki/xacro" >
+  <xacro:property name="plug_m" value="0.1"/>
+
+  <xacro:macro name="plug" params="parent *origin">
+    <!--plug-->
+    <joint name="joint_plug" type="fixed">
+      <xacro:insert_block name="origin"/>
+      <parent link="${parent}"/>
+      <child link="link_plug"/>
+    </joint>
+    <link name="link_plug">
+      <visual>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <mesh filename="package://plug_gazebo/media/materials/obj/plug.obj" scale="0.01 0.01 0.01"/>
+        </geometry>
+      </visual>
+      <collision>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <geometry>
+          <mesh filename="package://plug_gazebo/media/materials/obj/plug.obj" scale="0.01 0.01 0.01"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="${plug_m}"/>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <inertia ixx="${1/12*plug_m*(0.022*0.022+0.022*0.022)}" ixy="0" ixz="0" iyy="${1/12*plug_m*(0.022*0.022+0.07*0.07)}" iyz="0" izz="${1/12*plug_m*(0.07*0.07+0.022*0.022)}"/>
+      </inertial>
+    </link>
+  </xacro:macro>
+
+</robot>

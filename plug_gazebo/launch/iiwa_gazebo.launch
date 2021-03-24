@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="paused" default="false"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="gui" default="true"/>
+  <arg name="headless" default="false"/>
+  <arg name="debug" default="false"/>
+  <arg name="hardware_interface" default="PositionJointInterface"/>
+  <arg name="xyz" default="'1 2 0'"/>
+  <arg name="rpy" default="'0 0 1.57'"/>
+
+  <!-- Environment: office room-->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find plug_gazebo)/worlds/office_room.world"/>
+    <arg name="debug" value="$(arg debug)" />
+    <arg name="gui" value="$(arg gui)" />
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="headless" value="$(arg headless)"/>
+  </include>
+
+  <!-- Load the URDF with the given hardware interface into the ROS Parameter Server -->
+  <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find plug_description)/urdf/mmrobot.urdf.xacro' hardware_interface:=$(arg hardware_interface) robot_name:=iiwa origin_xyz:=$(arg xyz) origin_rpy:=$(arg rpy)"/>
+
+  <!-- Run a python script to send a service call to gazebo_ros to spawn a URDF robot -->
+  <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen" args="-urdf -model iiwa -param robot_description"/>
+
+  <!--Spawn controllers using a JointTrajectoryController-->
+  <include file="$(find plug_control)/launch/iiwa_control.launch">
+      <arg name="hardware_interface" value="$(arg hardware_interface)" />
+      <arg name="controllers" value="joint_state_controller $(arg hardware_interface)_trajectory_controller" />
+  </include>
+
+  <!-- Controllers -->
+  <!-- <include file="$(find plug_control)/launch/iiwa_control.launch">
+      <arg name="hardware_interface" value="$(arg hardware_interface)" />
+      <arg name="controllers" value="joint_state_controller
+           $(arg hardware_interface)_J1_controller
+           $(arg hardware_interface)_J2_controller
+           $(arg hardware_interface)_J3_controller
+           $(arg hardware_interface)_J4_controller
+           $(arg hardware_interface)_J5_controller
+           $(arg hardware_interface)_J6_controller
+           $(arg hardware_interface)_J7_controller"/>
+  </include> -->
+
+</launch>
