@@ -4,22 +4,44 @@
 
   <xacro:macro name="plug" params="parent *origin">
     <!--plug-->
+    <joint name="joint_plug_base" type="revolute">
+      <axis xyz="0 0 1" rpy="0 0 0"/>
+      <limit upper="0" lower="0" velocity="0" effort="3.0"/>
+      <dynamics damping="10" friction="1.0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${parent}"/>
+      <child link="link_plug_base"/>
+    </joint>
+    <link name="link_plug_base">
+      <visual>
+        <origin rpy="0 0 0" xyz="0 0 0.0025"/>
+        <geometry>
+          <cylinder length="0.005" radius="0.03"/>
+        </geometry>
+      </visual>
+      <collision>
+        <origin rpy="0 0 0" xyz="0 0 0.0025"/>
+        <geometry>
+          <cylinder length="0.005" radius="0.03"/>
+        </geometry>
+      </collision>
+    </link>
     <joint name="joint_plug" type="fixed">
       <xacro:insert_block name="origin"/>
-      <parent link="${parent}"/>
+      <parent link="link_plug_base"/>
       <child link="link_plug"/>
     </joint>
     <link name="link_plug">
       <visual>
         <origin rpy="0 0 0" xyz="0 0 0"/>
         <geometry>
-          <mesh filename="package://plug_gazebo/media/materials/obj/plug.obj" scale="0.01 0.01 0.01"/>
+          <mesh filename="package://plug_gazebo/media/materials/obj/plug.obj" scale="1 1 1"/>
         </geometry>
       </visual>
       <collision>
         <origin rpy="0 0 0" xyz="0 0 0"/>
         <geometry>
-          <mesh filename="package://plug_gazebo/media/materials/obj/plug.obj" scale="0.01 0.01 0.01"/>
+          <mesh filename="package://plug_gazebo/media/materials/obj/plug.obj" scale="1 1 1"/>
         </geometry>
       </collision>
       <inertial>

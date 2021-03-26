@@ -6,9 +6,11 @@ import numpy as np
 from numpy import pi, sqrt, cos, sin, arctan2, array, matrix
 import rospy
 from std_msgs.msg import Float64MultiArray, Time, Header, Duration, Float64
-from geometry_msgs.msg import WrenchStamped
+from geometry_msgs.msg import WrenchStamped, Pose, Twist
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from tf.transformations import quaternion_from_matrix, quaternion_matrix, euler_from_quaternion, quaternion_from_euler
+from numpy.linalg import norm
 
 """
 FTSensor for the kuka iiwa joint 7 (end effector)
@@ -73,8 +75,8 @@ class KukaArm:
         self.arm_l02 = 0.36 # arm length from joint 0-2
         self.arm_l24 = 0.42 # arm length from joint 2-4
         self.arm_l46 = 0.4 # arm length from joint 4-6
-        self.arm_l6E = 0.126 # arm length from joint 6-endeffector
-        self.tool_length = 0.07 # the length of the plug
+        self.arm_l6E = 0.126 # + 0.0964 # arm length from joint 6-endeffector, plus the tool length (0.05+0.7+0.214)
+        self.tr = 0.0 # redundency check if possible
         self.wrench = FTSensor(topic='/iiwa/state/CartesianWrench')
         self.joint_pos = None
         self.joint_sub = rospy.Subscriber('/iiwa/joint_states', JointState, self._joint_cb)
@@ -85,7 +87,7 @@ class KukaArm:
     def joint_position(self):
         return self.joint_pos
 
-    def tool_position(self):
+    def forward_kinematics(self,joints):
         def trig(angle):
             return cos(angle), sin(angle)
         def Hrrt(ty, tz, l):
@@ -95,13 +97,14 @@ class KukaArm:
                            [cy * sz, cz, sy * sz, 0.0],
                            [-sy, 0.0, cy, l],
                            [0.0, 0.0, 0.0, 1.0]])
-        def armbase2tool(joints):
+        def forward(t):
             H02 = Hrrt(joints[1],joints[0],self.arm_l02)
             H24 = Hrrt(-joints[3],joints[2],self.arm_l24)
             H46 = Hrrt(joints[5],joints[4],self.arm_l46)
-            H6E = Hrrt(0.0,joints[6],self.arm_l6E+self.tool_length)
+            H6E = Hrrt(0.0,joints[6],self.arm_l6E)
             H0E = H02 * H24 * H46 * H6E
             return H0E
+
         def matrix_to_cartesian(mat):
             cp = Pose()
             cp.position.x = mat[0,3]
@@ -112,10 +115,81 @@ class KukaArm:
             cp.orientation.y = q[1]
             cp.orientation.z = q[2]
             cp.orientation.w = q[3]
+            return cp
+        ###
+        mat = forward(joints)
+        cp = matrix_to_cartesian(mat)
         return cp
-        # forward kinematics
-        mat = armbase2tool(self.joint_pos)
-        return matrix_to_cartesian(mat)
+
+    def inverse_kinematics(self,cp):
+        def trig(angle):
+            return cos(angle), sin(angle)
+        def R(q):
+            return matrix(quaternion_matrix(q)[:3,:3])
+        def rr(p):
+            ty = arctan2(sqrt(p[0,0]**2 + p[1,0]**2), p[2,0])
+            tz = arctan2(p[1,0], p[0,0])
+            if tz < -pi/2.0:
+                ty = -ty
+                tz += pi
+            elif tz > pi/2.0:
+                ty = -ty
+                tz -= pi
+            return (ty, tz)
+        def Rz(tz):
+            (cz, sz) = trig(tz)
+            return matrix([[ cz, -sz, 0.0],
+                           [ sz,  cz, 0.0],
+                           [0.0, 0.0, 1.0]])
+        def Ryz(ty, tz):
+            (cy, sy) = trig(ty)
+            (cz, sz) = trig(tz)
+            return matrix([[cy * cz, -sz, sy * cz],
+                           [cy * sz, cz, sy * sz],
+                           [-sy, 0.0, cy]])
+        ###
+        t = 7*[0.0]
+        pE0 = matrix([[cp.position.x],
+                      [cp.position.y],
+                      [cp.position.z]])
+        qE0 = array([cp.orientation.x,
+                     cp.orientation.y,
+                     cp.orientation.z,
+                     cp.orientation.w])
+        pE6 = matrix([[0.0], [0.0], [self.arm_l6E]])
+        p20 = matrix([[0.0], [0.0], [self.arm_l02]])
+        RE0 = R(qE0)
+        p6E0 = RE0 * pE6
+        p60 = pE0 - p6E0
+        p260 = p60 - p20
+        s = norm(p260)
+        if s > self.arm_l24 + self.arm_l46:
+            print('invalid pose command')
+            return None
+
+        (tys, tzs) = rr(p260)
+        tp24z0 = 1/(2.0 * s) * (self.arm_l24**2 - self.arm_l46**2 + s**2)
+        tp240 = matrix([[-sqrt(self.arm_l24**2 - tp24z0**2)], [0.0], [tp24z0]])
+        p240 = Ryz(tys, tzs) * Rz(self.tr) * tp240
+        (t[1], t[0]) = rr(p240)
+
+        R20 = Ryz(t[1], t[0])
+        p40 = p20 + p240
+        p460 = p60 - p40
+        p462 = R20.T * p460
+        (t[3], t[2]) = rr(p462)
+        t[3] = -t[3]
+
+        R42 = Ryz(-t[3], t[2])
+        R40 = R20 * R42
+        p6E4 = R40.T * p6E0
+        (t[5], t[4]) = rr(p6E4)
+
+        R64 = Ryz(t[5], t[4])
+        R60 = R40 * R64
+        RE6 = R60.T * RE0
+        t[6] = arctan2(RE6[1,0], RE6[0,0])
+        return t
 
     def tool_force(self):
         return self.wrench.data()
@@ -138,44 +212,62 @@ class ArmController:
     def __init__(self, arm):
         self.arm = arm
         self.trajectory_pub = rospy.Publisher('iiwa/PositionJointInterface_trajectory_controller/command', JointTrajectory, queue_size=1)
+        self.status = "none"
+        self.goal = None
+        self.velocity = 0.0
+
+    def set_goal(self,goal,velocity=0.0):
+        if goal == None:
+            return
+        self.goal = goal
+        self.velocity = velocity
+        # print("set goal:", goal)
 
     def reached(self,goal,tolerance=0.001):
         err = np.array(goal)-np.array(self.arm.joint_position())
+        print("error", err)
         if abs(err[0]) > tolerance:
-            print("error", err)
             return False
         if abs(err[1]) > tolerance:
-            print("error", err)
             return False
         if abs(err[2]) > tolerance:
-            print("error", err)
             return False
         if abs(err[3]) > tolerance:
-            print("error", err)
             return False
         if abs(err[4]) > tolerance:
-            print("error", err)
             return False
         if abs(err[5]) > tolerance:
-            print("error", err)
             return False
         if abs(err[6]) > tolerance:
-            print("error", err)
             return False
-        print("goal reached")
         return True
 
-    def move_to_goal(self, goal, speed=0.1, tolerance = 0.001):
-        if self.reached(goal,tolerance):
+    def move_to_goal(self, tolerance=0.001):
+        if self.reached(self.goal,tolerance):
+            self.status = "set"
             return
-            
+
         msg = JointTrajectory()
         msg.header = Header()
         msg.header.stamp = rospy.Time.now()
         msg.joint_names=['iiwa_joint_1','iiwa_joint_2','iiwa_joint_3','iiwa_joint_4','iiwa_joint_5','iiwa_joint_6','iiwa_joint_7']
         point = JointTrajectoryPoint()
-        point.positions = goal
-        point.velocities = [speed]*len(goal)
+        point.positions = self.goal
+        point.velocities = 7*[self.velocity]
         point.time_from_start = rospy.Duration(2)
         msg.points.append(point)
         self.trajectory_pub.publish(msg)
+
+    def stop(self):
+        msg = JointTrajectory()
+        msg.header = Header()
+        msg.header.stamp = rospy.Time.now()
+        msg.joint_names=['iiwa_joint_1','iiwa_joint_2','iiwa_joint_3','iiwa_joint_4','iiwa_joint_5','iiwa_joint_6','iiwa_joint_7']
+        point = JointTrajectoryPoint()
+        point.positions = self.arm.joint_position()
+        point.velocities = 7*[0.0]
+        point.time_from_start = rospy.Duration(2)
+        msg.points.append(point)
+        self.trajectory_pub.publish(msg)
+        print("stop")
+        self.status = "reached"
