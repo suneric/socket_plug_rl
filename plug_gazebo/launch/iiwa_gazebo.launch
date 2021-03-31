@@ -43,5 +43,5 @@
            $(arg hardware_interface)_J6_controller
            $(arg hardware_interface)_J7_controller"/>
   </include> -->
-
+  <include file="$(find plug_control)/launch/object_detection.launch"/>
 </launch>

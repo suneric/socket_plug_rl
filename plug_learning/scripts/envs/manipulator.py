@@ -7,10 +7,39 @@ from numpy import pi, sqrt, cos, sin, arctan2, array, matrix
 import rospy
 from std_msgs.msg import Float64MultiArray, Time, Header, Duration, Float64
 from geometry_msgs.msg import WrenchStamped, Pose, Twist
+from gazebo_msgs.msg import ContactsState
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from tf.transformations import quaternion_from_matrix, quaternion_matrix, euler_from_quaternion, quaternion_from_euler
 from numpy.linalg import norm
+
+class BumpSensor:
+    def __init__(self, topic='/bumper_plug'):
+        self.topic = topic
+        self.contact_sub = rospy.Subscriber(self.topic, ContactsState, self._contact_cb)
+        self.touched = False
+
+    def connected(self):
+        return self.touched
+
+    def _contact_cb(self, data):
+        states = data.states
+        if len(states) > 0:
+            self.touched = True
+        else:
+            self.touched = False
+        # print(self.touched)
+
+    def check_sensor_ready(self):
+        self.touched = False
+        rospy.logdebug("Waiting for /bumper_plug to be READY...")
+        while not rospy.is_shutdown():
+            try:
+                data = rospy.wait_for_message("/bumper_plug", ContactsState, timeout=5.0)
+                self.touched = len(data.states) > 0
+                rospy.logdebug("Current /bumper_plugs READY=>")
+            except:
+                rospy.logerr("Current /bumper_plug not ready yet, retrying for getting  /bumper_plug")
 
 """
 FTSensor for the kuka iiwa joint 7 (end effector)
@@ -75,9 +104,8 @@ class KukaArm:
         self.arm_l02 = 0.36 # arm length from joint 0-2
         self.arm_l24 = 0.42 # arm length from joint 2-4
         self.arm_l46 = 0.4 # arm length from joint 4-6
-        self.arm_l6E = 0.126 # + 0.0964 # arm length from joint 6-endeffector, plus the tool length (0.05+0.7+0.214)
+        self.arm_l6E = 0.126 + 0.0964 # arm length from joint 6-endeffector, plus the tool length (0.05+0.7+0.214)
         self.tr = 0.0 # redundency check if possible
-        self.wrench = FTSensor(topic='/iiwa/state/CartesianWrench')
         self.joint_pos = None
         self.joint_sub = rospy.Subscriber('/iiwa/joint_states', JointState, self._joint_cb)
 
@@ -191,9 +219,6 @@ class KukaArm:
         t[6] = arctan2(RE6[1,0], RE6[0,0])
         return t
 
-    def tool_force(self):
-        return self.wrench.data()
-
     def check_sensor_ready(self):
         self.joint_pos = None
         rospy.logdebug("Waiting for /iiwa/joint_states to be READY...")
@@ -216,13 +241,6 @@ class ArmController:
         self.goal = None
         self.velocity = 0.0
 
-    def set_goal(self,goal,velocity=0.0):
-        if goal == None:
-            return
-        self.goal = goal
-        self.velocity = velocity
-        # print("set goal:", goal)
-
     def reached(self,goal,tolerance=0.001):
         err = np.array(goal)-np.array(self.arm.joint_position())
         print("error", err)
@@ -242,9 +260,13 @@ class ArmController:
             return False
         return True
 
-    def move_to_goal(self, tolerance=0.001):
-        if self.reached(self.goal,tolerance):
-            self.status = "set"
+    def move(self, goal, tolerance=0.001):
+        if goal == None:
+            print("invalid goal")
+            return
+
+        if self.reached(goal,tolerance):
+            self.status = "reached"
             return
 
         msg = JointTrajectory()
@@ -252,22 +274,48 @@ class ArmController:
         msg.header.stamp = rospy.Time.now()
         msg.joint_names=['iiwa_joint_1','iiwa_joint_2','iiwa_joint_3','iiwa_joint_4','iiwa_joint_5','iiwa_joint_6','iiwa_joint_7']
         point = JointTrajectoryPoint()
-        point.positions = self.goal
-        point.velocities = 7*[self.velocity]
-        point.time_from_start = rospy.Duration(2)
-        msg.points.append(point)
-        self.trajectory_pub.publish(msg)
-
-    def stop(self):
-        msg = JointTrajectory()
-        msg.header = Header()
-        msg.header.stamp = rospy.Time.now()
-        msg.joint_names=['iiwa_joint_1','iiwa_joint_2','iiwa_joint_3','iiwa_joint_4','iiwa_joint_5','iiwa_joint_6','iiwa_joint_7']
-        point = JointTrajectoryPoint()
-        point.positions = self.arm.joint_position()
+        point.positions = goal
         point.velocities = 7*[0.0]
-        point.time_from_start = rospy.Duration(2)
+        point.time_from_start = rospy.Duration(1.5)
         msg.points.append(point)
         self.trajectory_pub.publish(msg)
-        print("stop")
-        self.status = "reached"
+        self.status = "moving"
+
+    def init(self, goal, tolerance=0.1, duration=0.2):
+        while not self.reached(goal,tolerance):
+            msg = JointTrajectory()
+            msg.header = Header()
+            msg.header.stamp = rospy.Time.now()
+            msg.joint_names=['iiwa_joint_1','iiwa_joint_2','iiwa_joint_3','iiwa_joint_4','iiwa_joint_5','iiwa_joint_6','iiwa_joint_7']
+            point = JointTrajectoryPoint()
+            point.positions = goal
+            point.velocities = 7*[0.0]
+            point.time_from_start = rospy.Duration(1.5)
+            msg.points.append(point)
+            self.trajectory_pub.publish(msg)
+            self.status = "initlizing"
+            print("initializing")
+            rospy.sleep(duration)
+        else:
+            self.status = "initialized"
+            print("initialized")
+
+    def stop(self, tolerance=0.1, duration=0.2):
+        goal = self.arm.joint_position()
+        while not self.reached(goal,tolerance):
+            msg = JointTrajectory()
+            msg.header = Header()
+            msg.header.stamp = rospy.Time.now()
+            msg.joint_names=['iiwa_joint_1','iiwa_joint_2','iiwa_joint_3','iiwa_joint_4','iiwa_joint_5','iiwa_joint_6','iiwa_joint_7']
+            point = JointTrajectoryPoint()
+            point.positions = goal
+            point.velocities = 7*[0.0]
+            point.time_from_start = rospy.Duration(1.5)
+            msg.points.append(point)
+            self.trajectory_pub.publish(msg)
+            self.status = "stopping"
+            print("stopping")
+            rospy.sleep(duration)
+        else:
+            self.status = "stop"
+            print("stop")

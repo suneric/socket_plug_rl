@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <robot xmlns:xacro="https://www.ros.org/wiki/xacro" >
   <xacro:property name="plug_m" value="0.1"/>
+  <xacro:property name="M_PI" value="3.1415926535897931"/>
 
   <xacro:macro name="plug" params="parent *origin">
     <!--plug-->
@@ -50,6 +51,41 @@
         <inertia ixx="${1/12*plug_m*(0.022*0.022+0.022*0.022)}" ixy="0" ixz="0" iyy="${1/12*plug_m*(0.022*0.022+0.07*0.07)}" iyz="0" izz="${1/12*plug_m*(0.07*0.07+0.022*0.022)}"/>
       </inertial>
     </link>
+    <joint name="joint_bumper" type="fixed">
+      <origin xyz="0.011 -0.013 0.0705" rpy="0 ${M_PI/2} 0"/>
+      <parent link="link_plug"/>
+      <child link="link_bumper"/>
+    </joint>
+    <link name="link_bumper">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.001 0.002 0.005"/>
+        </geometry>
+      </visual>
+      <collision name="bump_sensor_collision">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.001 0.002 0.005"/>
+        </geometry>
+      </collision>
+    </link>
+
+    <gazebo reference="link_bumper">
+      <material>Gazebo/Blue</material>
+      <sensor name="main_bumper" type="contact">
+        <contact>
+          <collision>link_plug_base_fixed_joint_lump__bump_sensor_collision_collision_2</collision>
+        </contact>
+        <plugin name="gazebo_ros_bumper_controller" filename="libgazebo_ros_bumper.so">
+          <bumperTopicName>bumper_plug</bumperTopicName>
+          <frameName>world</frameName>
+          <alwaysOn>true</alwaysOn>
+          <updateRate>5.0</updateRate>
+        </plugin>
+      </sensor>
+    </gazebo>
+
   </xacro:macro>
 
 </robot>

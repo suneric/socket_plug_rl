@@ -1,0 +1,3 @@
+<launch>
+  <node pkg="plug_control" type="detection_walloutlet.py" name="walloutlet_detection" output="screen"/>
+</launch>
