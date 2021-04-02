@@ -15,9 +15,11 @@ import cv2
 
 class SocketPlugEnv(GymGazeboEnv):
     def __init__(self,resolution=(64,64),cam_noise=0.0):
+        # do not reset simulation as it will reset the time which will
+        # make the trajectory control of kuka break as there will be message using old time (#just my guess).
         super(SocketPlugEnv, self).__init__(
             start_init_physics_parameters=False,
-            reset_world_or_sim="WORLD"
+            reset_world_or_sim="NO_RESET_SIM"
         )
 
         self.action_space = self._action_space()
@@ -103,8 +105,8 @@ class SocketPlugEnv(GymGazeboEnv):
         elif self.force > 30:
             reward = -10
         else:
-            penalty = 0.01 + 0.01*self.force # step and force
-            reward = 10000*self.delta-penalty
+            penalty = 0.01
+            reward = 1000*self.delta-penalty
         print("reward", self.force, self.delta, reward)
         return reward
 
