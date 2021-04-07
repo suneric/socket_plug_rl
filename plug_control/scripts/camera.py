@@ -44,6 +44,10 @@ class RPIv2:
             except CvBridgeError as e:
                 print(e)
 
+    def draw(self):
+        cv.imshow('rpiv2',self.cv_color)
+        cv.waitKey(1)
+
 # realsense d435
 class RSD435:
     # create a image view with a frame size for the ROI
@@ -103,6 +107,10 @@ class RSD435:
         scale = 1
         point3d = [scale*depth*x,scale*depth*y,scale*depth]
         return point3d
+
+    def draw(self):
+        cv.imshow('realsense',self.cv_color)
+        cv.waitKey(1)
 
     #### data
     def depth_image(self):

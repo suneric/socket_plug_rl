@@ -104,7 +104,7 @@ class KukaArm:
         self.arm_l02 = 0.36 # arm length from joint 0-2
         self.arm_l24 = 0.42 # arm length from joint 2-4
         self.arm_l46 = 0.4 # arm length from joint 4-6
-        self.arm_l6E = 0.126 + 0.0964 # arm length from joint 6-endeffector, plus the tool length (0.05+0.7+0.214)
+        self.arm_l6E = 0.126 # + 0.0964 # arm length from joint 6-endeffector, plus the tool length (0.05+0.7+0.214)
         self.tr = 0.0 # redundency check if possible
         self.joint_pos = None
         self.joint_sub = rospy.Subscriber('/iiwa/joint_states', JointState, self._joint_cb)
@@ -115,7 +115,7 @@ class KukaArm:
     def joint_position(self):
         return self.joint_pos
 
-    def forward_kinematics(self,joints):
+    def forward_matrix(self,joints,tool_length=0.0964):
         def trig(angle):
             return cos(angle), sin(angle)
         def Hrrt(ty, tz, l):
@@ -129,10 +129,12 @@ class KukaArm:
             H02 = Hrrt(joints[1],joints[0],self.arm_l02)
             H24 = Hrrt(-joints[3],joints[2],self.arm_l24)
             H46 = Hrrt(joints[5],joints[4],self.arm_l46)
-            H6E = Hrrt(0.0,joints[6],self.arm_l6E)
+            H6E = Hrrt(0.0,joints[6],self.arm_l6E+tool_length)
             H0E = H02 * H24 * H46 * H6E
             return H0E
+        return forward(joints)
 
+    def forward_kinematics(self,joints,tool_length=0.0964):
         def matrix_to_cartesian(mat):
             cp = Pose()
             cp.position.x = mat[0,3]
@@ -145,11 +147,11 @@ class KukaArm:
             cp.orientation.w = q[3]
             return cp
         ###
-        mat = forward(joints)
+        mat = self.forward_matrix(joints)
         cp = matrix_to_cartesian(mat)
         return cp
 
-    def inverse_kinematics(self,cp):
+    def inverse_kinematics(self,cp,tool_length=0.0964):
         def trig(angle):
             return cos(angle), sin(angle)
         def R(q):
@@ -184,7 +186,7 @@ class KukaArm:
                      cp.orientation.y,
                      cp.orientation.z,
                      cp.orientation.w])
-        pE6 = matrix([[0.0], [0.0], [self.arm_l6E]])
+        pE6 = matrix([[0.0], [0.0], [self.arm_l6E+tool_length]])
         p20 = matrix([[0.0], [0.0], [self.arm_l02]])
         RE0 = R(qE0)
         p6E0 = RE0 * pE6

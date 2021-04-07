@@ -37,6 +37,7 @@ class SocketPlugEnv(GymGazeboEnv):
         rospy.logdebug("Finished ScoeketPlugEnv INIT...")
 
         self.success = False
+        self.fail = False
         self.force = 0.0
         self.delta = 0.0
 
@@ -77,8 +78,10 @@ class SocketPlugEnv(GymGazeboEnv):
 
     def _set_init(self):
         self.arm_controller.stop()
+        self.change_position(-0.1,0,0,1)
         self.init_endeffoctor()
         self.success = False
+        self.fail = False
         self.force = 0.0
         self.delta = 0.0
         self.ft_sensor.reset_filtered()
@@ -88,12 +91,13 @@ class SocketPlugEnv(GymGazeboEnv):
         # delta change in x
         self.delta = self.change_position(action[0],action[1],action[2])
         self.success = self.contact_sensor.connected()
+        self.fail = self.is_out()
         self.force = self.max_force()
-        if self.success or self.force > 30:
+        if self.success or self.fail or self.force > 30:
             self.arm_controller.stop()
 
     def _is_done(self):
-        if self.success or self.force > 30:
+        if self.success or self.fail or self.force > 30:
             return True
         else:
             return False
@@ -102,7 +106,7 @@ class SocketPlugEnv(GymGazeboEnv):
         reward = 0
         if self.success:
             reward = 100
-        elif self.force > 30:
+        elif self.force > 30 or self.fail:
             reward = -10
         else:
             penalty = 0.01
@@ -134,11 +138,22 @@ class SocketPlugEnv(GymGazeboEnv):
     def filtered_force_record(self):
         return self.ft_sensor.filtered()
 
+    def is_out(self):
+        cp = self.arm.forward_kinematics(self.arm.joint_position())
+        py = cp.position.y+0.034242
+        pz = cp.position.z-0.3210818
+        if py > 0.01 or py < -0.01:
+            return True
+        if pz > 0.02 or pz < -0.01:
+            return True
+        return False
+
     def init_endeffoctor(self):
+        ref = np.random.uniform(size=3)
         cp = Pose()
-        cp.position.x = 0.9526252
-        cp.position.y = -0.0342420
-        cp.position.z = 0.3210818
+        cp.position.x = 0.9728864 #+ 0.005*(ref[0]-1.0)
+        cp.position.y = -0.0342420 #+ 0.01*(ref[1]-0.5)
+        cp.position.z = 0.3210818 #+ 0.01*(ref[2]-0.5)
         cp.orientation.x = 0
         cp.orientation.y = 0.70710678119
         cp.orientation.z = 0

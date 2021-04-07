@@ -8,7 +8,7 @@ import rospy
 import numpy as np
 import cv2
 import time
-from camera import RPIv2
+from camera import RPIv2, RSD435
 import os
 from plug_control.msg import WalloutletInfo
 
@@ -21,7 +21,7 @@ def socket_boxes(img,classifer):
     return handles
 
 def draw_prediction(img,boxes,valid,info,label):
-    H,W = sensor.image_size()
+    H,W = img.shape[:2]
     text_horizontal = 0
     if valid:
         (x,y,w,h) = boxes[0]
@@ -47,7 +47,7 @@ def target_distance_and_yaw(boxes,sensor):
     cu = u+w/2
     cv = v+h/2
     # get the center point in 3d of the box
-    pt3d = sensor.point3d(u,v)
+    pt3d = sensor.point3d(cu,cv)
     # get the yaw of the system with, by using the difference of the two symmetry points
     # depth, if the yaw is zero, the depth difference should be zero too.
     lu,ru = cu-w/5,cu+w/5
@@ -67,20 +67,26 @@ def target_boxes(boxes):
     info[4:7]=boxes[0]
     return True,info
 
-def detect_walloutlet(sensor,classifer):
+def detect_walloutlet(sensor,classifer,depth=False):
     info = [-1,-1,-1,-1,-1,-1,-1,-1]
     if not sensor.ready():
         return False,info
     img = sensor.color_image()
     boxes = socket_boxes(img,classifer)
-    valid,info = target_boxes(boxes)
-    draw_prediction(img,boxes,valid,info,"electric socket")
+    valid,info = False,None
+    if depth:
+        valid,info = target_distance_and_yaw(boxes,sensor)
+    else:
+        valid,info = target_boxes(boxes)
+    draw_prediction(img, boxes, valid, info,"electric socket")
     return valid,info
 
 if __name__ == '__main__':
     pub = rospy.Publisher('detection/walloutlet', WalloutletInfo, queue_size=1)
     rospy.init_node("walloutlet_detection", anonymous=True, log_level=rospy.INFO)
-    sensor = RPIv2()
+    rospy.sleep(1)
+    cam2d = RPIv2()
+    cam3d = RSD435()
     # load classfier
     dir = os.path.dirname(os.path.realpath(__file__))
     dir = os.path.join(dir,'../classifier/opencv/cascade.xml')
@@ -88,7 +94,9 @@ if __name__ == '__main__':
     rate = rospy.Rate(30)
     try:
         while not rospy.is_shutdown():
-            detectable,info = detect_walloutlet(sensor,classifer)
+            if cam3d.ready():
+                cam3d.draw()
+            detectable,info = detect_walloutlet(cam2d,classifer,depth=False)
             msg = WalloutletInfo()
             msg.detectable = detectable
             msg.x = info[0]

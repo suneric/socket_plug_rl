@@ -21,6 +21,7 @@ def change_position(arm, controller, dx, dy, dz):
     joints = arm.inverse_kinematics(newcp)
     controller.move(joints,0.001)
     current = arm.forward_kinematics(arm.joint_position())
+    print("initialize", current)
     return current.position.x - cp.position.x
 
 def keyboard_control(arm, controller):
@@ -57,9 +58,9 @@ if __name__ == "__main__":
         while not rospy.is_shutdown():
             if controller.status == "none":
                 cp = Pose()
-                cp.position.x = 0.9526252
+                cp.position.x = 0.88
                 cp.position.y = -0.0342420
-                cp.position.z = 0.3210818
+                cp.position.z = 0.1
                 cp.orientation.x = 0
                 cp.orientation.y = 0.70710678119
                 cp.orientation.z = 0
