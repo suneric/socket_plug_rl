@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import sys
 sys.path.append('..')
 sys.path.append('.')
@@ -43,7 +43,7 @@ if gpus:
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--noise', type=float, default=0.0)
-    parser.add_argument('--max_ep', type=int, default=10000)
+    parser.add_argument('--max_ep', type=int, default=100)
     parser.add_argument('--max_step', type=int, default=100)
     return parser.parse_args()
 

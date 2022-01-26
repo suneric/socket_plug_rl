@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 from __future__ import print_function
 
 import numpy as np
@@ -27,7 +27,7 @@ def change_position(arm, controller, dx, dy, dz):
 def keyboard_control(arm, controller):
     dx, dy, dz = 0.0, 0.0, 0.0
     scale = 0.01
-    key = raw_input("move (w: +z, x:-z, a:-y, d:+y, f:+x, b:-x, s: stop)\n")
+    key = input("move (w: +z, x:-z, a:-y, d:+y, f:+x, b:-x, s: stop)\n")
     if key == 'w':
         dz = scale
     elif key == 'x':
@@ -58,9 +58,9 @@ if __name__ == "__main__":
         while not rospy.is_shutdown():
             if controller.status == "none":
                 cp = Pose()
-                cp.position.x = 0.88
-                cp.position.y = -0.0342420
-                cp.position.z = 0.1
+                cp.position.x = 0.8369868
+                cp.position.y = -0.029758
+                cp.position.z = 0.3
                 cp.orientation.x = 0
                 cp.orientation.y = 0.70710678119
                 cp.orientation.z = 0
