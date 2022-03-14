@@ -14,11 +14,11 @@ from .manipulator import BumpSensor, FTSensor, KukaArm, ArmController
 from plug_control.msg import WalloutletInfo
 import cv2
 
-class SocketPlugEnv(GymGazeboEnv):
+class SocketPlugEnv2(GymGazeboEnv):
     def __init__(self,resolution=(300,300),cam_noise=0.0):
         # do not reset simulation as it will reset the time which will
         # make the trajectory control of kuka break as there will be message using old time (#just my guess).
-        super(SocketPlugEnv, self).__init__(
+        super(SocketPlugEnv2, self).__init__(
             start_init_physics_parameters=False,
             reset_world_or_sim="NO_RESET_SIM"
         )
@@ -43,6 +43,8 @@ class SocketPlugEnv(GymGazeboEnv):
         self.detectable = False
         self.boxcenter = (0,0)
         self.dist2goal = 0
+        self.touch_forces = np.zeros(3)
+        self.touch_position = np.zeros(3)
 
     def detectcb(self, data):
         self.detectable = data.detectable
@@ -65,10 +67,8 @@ class SocketPlugEnv(GymGazeboEnv):
         rospy.logdebug("All Publishers READY")
 
     def _get_observation(self):
-        obs = dict(image = self.camera.grey_arr(),
-                force = np.array(self.ft_sensor.data()),
-                joint = np.array(self.arm.joint_position()))
-        # print(obs['force'], obs['joint'])
+        obs = dict(force = self.touch_forces, position = self.touch_position)
+        # print(obs["force"], obs["position"])
         return obs
 
     def _post_information(self):
@@ -85,6 +85,7 @@ class SocketPlugEnv(GymGazeboEnv):
     def _set_init(self):
         self.ready_position = self.init_endeffoctor()
         self.ft_sensor.reset_filtered()
+        self.ready_position = self.plug_adaptor()
         self.success = False
         self.fail = False
         self.ready2plug = False
@@ -92,17 +93,14 @@ class SocketPlugEnv(GymGazeboEnv):
         self.boxcenter = (0,0)
 
     def _take_action(self, action): # action = [dy,dz]
-        self.ready_position = self.adjust_adaptor(action)
-        self.dist2goal = self.distance2target()
-        if self.dist2goal < 0.005:
-            self.ready2plug = True
-            self.success = self.plug_adaptor()
-            self.pull_adaptor()
-        else:
-            self.ready2plug = False
-            self.success = False
-
+        print(">>> actions dy: {:.4f}, dz: {:.4f}".format(action[0], action[1]))
+        self.adjust_adaptor(0.0,action[0],action[1])
+        self.plug_adaptor(max_force=300,step=0.005)
+        self.success = self.contact_sensor.connected()
         self.fail = not self.walloutlet_detachable()
+        if not self.success:
+            self.pull_adaptor()
+            self.plug_adaptor()
 
     def _is_done(self):
         return self.success or self.fail
@@ -114,11 +112,8 @@ class SocketPlugEnv(GymGazeboEnv):
         elif self.fail:
             reward = -50
         else:
-            if self.ready2plug:
-                reward = 50
-            else:
-                reward = -1
-        print("step reward: {:.3f}".format(reward))
+            reward = -1
+        print(">>> step reward: {:.3f}".format(reward))
         return reward
 
     ###########################################################
@@ -162,58 +157,55 @@ class SocketPlugEnv(GymGazeboEnv):
         cp = self.random_init_position()
         joints = self.arm.inverse_kinematics(cp)
         self.arm_controller.init(joints)
-        print("initialize (", cp.position.x, cp.position.y, cp.position.z, ")")
+        print("=== arm initialize (", cp.position.x, cp.position.y, cp.position.z, ")")
         return self.arm.forward_kinematics(self.arm.joint_position())
 
     # step actions for trying to plug adaptor
     # adjust, plug, and pull back
-    def adjust_adaptor(self, action):
-        cp = Pose()
-        cp.position.x = self.ready_position.position.x + 0.005
-        cp.position.y = self.ready_position.position.y + action[0]
-        cp.position.z = self.ready_position.position.z + action[1]
-        cp.orientation = self.endeffector_orientation()
-        joints = self.arm.inverse_kinematics(cp)
+    def adjust_adaptor(self,dx,dy,dz):
+        self.ready_position.position.x += dx
+        self.ready_position.position.y += dy
+        self.ready_position.position.z += dz
+        joints = self.arm.inverse_kinematics(self.ready_position)
         self.arm_controller.init(joints)
-        print("adjust (y:", action[0], " z:", action[1], ")")
-        return self.arm.forward_kinematics(self.arm.joint_position())
+        cp = self.ready_position
+        print("=== arm move to (", cp.position.x, cp.position.y, cp.position.z, ")")
 
-    def plug_adaptor(self, max_force = 100):
-        print("pluging...")
+    def plug_adaptor(self, max_force = 5, step = 0.01):
+        print("=== arm pluging...")
         cp = Pose()
         cp.position.x = self.ready_position.position.x
         cp.position.y = self.ready_position.position.y
         cp.position.z = self.ready_position.position.z
         cp.orientation = self.endeffector_orientation()
-        while not self.contact_sensor.connected() and self.max_force() < max_force:
-            cp.position.x += 0.01
+        while self.ft_sensor.data()[2] > -max_force:
+            cp.position.x += step
             cp.position.y = self.ready_position.position.y
             cp.position.z = self.ready_position.position.z
             cp.orientation = self.endeffector_orientation()
             joints = self.arm.inverse_kinematics(cp)
             self.arm_controller.move(joints)
             cp = self.arm.forward_kinematics(self.arm.joint_position())
-        print("max force detected", self.max_force())
+            # print("forces detected", self.ft_sensor.data())
         self.arm_controller.stop()
-        return self.contact_sensor.connected()
+        self.touch_forces = np.array(self.ft_sensor.data())
+        self.touch_position = np.array([cp.position.x, cp.position.y, cp.position.z])
+        print(">>> info force", self.touch_forces, "position", self.touch_position)
+        self.ready_position.position.x = self.touch_position[0]-0.02
+        return self.ready_position
 
     def pull_adaptor(self):
         cp = self.ready_position
-        print("pull back (", cp.position.x, cp.position.y, cp.position.z, ")")
+        print("=== arm pull back (", cp.position.x, cp.position.y, cp.position.z, ")")
         joints = self.arm.inverse_kinematics(cp)
         self.arm_controller.init(joints)
 
     def walloutlet_detachable(self):
+        detachable = True
         cp = self.arm.forward_kinematics(self.arm.joint_position())
-        if cp.position.y > -0.0339 + 0.03 or cp.position.y < -0.0339 - 0.03:
-            return False
-        if cp.position.z > 0.3609 + 0.03 or cp.position.z < 0.3609 - 0.03:
-            return False
-        return True
-
-        # (cu, cv) = self.boxcenter
-        # print("walloutlet is detectable:",self.detectable, cu, cv)
-        # if self.detectable and cu > 100 and cu < 500 and cv > 100 and cv < 600:
-        #     return True
-        # else:
-        #     return False
+        if cp.position.y > -0.0339 + 0.04 or cp.position.y < -0.0339 - 0.04:
+            detachable = False
+        if cp.position.z > 0.3609 + 0.05 or cp.position.z < 0.3609 - 0.05:
+            detachable = False
+        # print("detachable", detachable)
+        return detachable

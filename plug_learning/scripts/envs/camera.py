@@ -14,7 +14,7 @@ import rospy
 CameraSensor with resolution, topic and guassian noise level by default variance = 0.0, mean = 0.0
 """
 class RPIv2:
-    def __init__(self, resolution=(64,64), topic='/rpi/image', noise=0):
+    def __init__(self, resolution=(300,300), topic='/rpi/image', noise=0):
         self.resolution = resolution
         self.topic = topic
         self.noise = noise
@@ -35,20 +35,20 @@ class RPIv2:
         img = cv2.resize(self.rgb_image, self.resolution)
         # normalize the image for easier training
         img_arr = np.array(img)/255 - 0.5
-        img_arr = img_arr.reshape((64,64,3))
+        img_arr = img_arr.reshape((self.resolution[0],self.resolution[1],3))
         return img_arr
 
     def grey_arr(self):
         img = cv2.resize(self.grey_image, self.resolution)
         # normalize the image for easier training
         img_arr = np.array(img)/255 - 0.5
-        img_arr = img_arr.reshape((64,64,1))
+        img_arr = img_arr.reshape((self.resolution[0],self.resolution[1],1))
         return img_arr
 
     # blind camera
     def zero_arr(self):
         img_arr = np.zeros(self.resolution)
-        img_arr = img_arr.reshape((64,64,1))
+        img_arr = img_arr.reshape((self.resolution[0],self.resolution[1],1))
         return img_arr
 
     def _guass_noisy(self,image,var):
@@ -61,7 +61,7 @@ class RPIv2:
 
     def show(self):
         # cv2.namedWindow("rpi-v2")
-        cv2.imshow("rpiv2", self.rgb_image)
+        cv2.imshow("rpiv2", self.grey_arr())
         cv2.waitKey(1) #& 0xFF
 
 # realsense d435

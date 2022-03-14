@@ -40,13 +40,13 @@
   <!--camera-->
   <xacro:include filename="$(find plug_description)/urdf/camera.urdf.xacro"/>
   <xacro:rpi parent="iiwa_link_ee">
-    <origin xyz="-0.015 0 0.062" rpy="0 ${-M_PI/2} 0" />
+    <origin xyz="-0.06 0 0.02" rpy="0 ${-M_PI/2} 0" />
   </xacro:rpi>
 
   <!--RGB-D camera, look forward-->
   <!-- <xacro:include filename="$(find plug_description)/urdf/realsense.urdf.xacro" />
-  <xacro:realsense_macro parent="link_fbumper">
-    <origin xyz="0.0608 0 0.07" rpy="0 0 0" />
+  <xacro:realsense_macro parent="iiwa_link_ee">
+    <origin xyz="-0.06 0 0.02" rpy="0 ${-M_PI/2} 0" />
     <xacro:property name="camera_width" value="640" />
     <xacro:property name="camera_height" value="480" />
     <xacro:property name="camera_name" value="rs435" />

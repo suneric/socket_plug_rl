@@ -65,8 +65,8 @@ class RSD435:
         # data
         self.cv_color = []
         self.cv_depth = []
-        self.width = 1024
-        self.height = 720
+        self.width = 640
+        self.height = 480
 
     def ready(self):
         return self.cameraInfoUpdate and len(self.cv_color) > 0 and len(self.cv_depth) > 0
@@ -112,7 +112,6 @@ class RSD435:
         cv.imshow('realsense',self.cv_color)
         cv.waitKey(1)
 
-    #### data
     def depth_image(self):
         return self.cv_depth
     def color_image(self):

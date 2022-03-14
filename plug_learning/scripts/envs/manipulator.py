@@ -243,9 +243,9 @@ class ArmController:
         self.goal = None
         self.velocity = 0.0
 
-    def reached(self,goal,tolerance=0.001):
+    def reached(self,goal,tolerance=0.02):
         err = np.array(goal)-np.array(self.arm.joint_position())
-        print("error", err)
+        # print(err)
         if abs(err[0]) > tolerance:
             return False
         if abs(err[1]) > tolerance:
@@ -262,14 +262,24 @@ class ArmController:
             return False
         return True
 
-    def move(self, goal, tolerance=0.001):
-        if goal == None:
-            print("invalid goal")
-            return
+    def rotate(self, angle):
+        joints = list(self.arm.joint_position())
+        print("current joints",joints)
+        # joint 6 rotation
+        j6 = joints[6]
+        if j6 + angle < pi and j6 + angle > -pi:
+            joints[6] = j6+angle
+        print("new joints",joints)
+        self.move(joints)
 
-        if self.reached(goal,tolerance):
+    def move(self, goal, duration=0.2):
+        if goal == None:
+            # print("invalid goal")
+            return self.arm.joint_position()
+
+        if self.reached(goal):
             self.status = "reached"
-            return
+            return goal
 
         msg = JointTrajectory()
         msg.header = Header()
@@ -281,10 +291,12 @@ class ArmController:
         point.time_from_start = rospy.Duration(1.5)
         msg.points.append(point)
         self.trajectory_pub.publish(msg)
-        self.status = "moving"
+        # self.status = "moving"
+        rospy.sleep(duration)
+        return self.arm.joint_position()
 
-    def init(self, goal, tolerance=0.1, duration=0.2):
-        while not self.reached(goal,tolerance):
+    def init(self, goal, duration=0.2):
+        while not self.reached(goal):
             msg = JointTrajectory()
             msg.header = Header()
             msg.header.stamp = rospy.Time.now()
@@ -296,15 +308,15 @@ class ArmController:
             msg.points.append(point)
             self.trajectory_pub.publish(msg)
             self.status = "initlizing"
-            print("initializing")
+            # print("initializing")
             rospy.sleep(duration)
         else:
             self.status = "initialized"
-            print("initialized")
+            # print("initialized")
 
-    def stop(self, tolerance=0.1, duration=0.2):
+    def stop(self, duration=0.2):
         goal = self.arm.joint_position()
-        while not self.reached(goal,tolerance):
+        while not self.reached(goal):
             msg = JointTrajectory()
             msg.header = Header()
             msg.header.stamp = rospy.Time.now()
@@ -316,8 +328,8 @@ class ArmController:
             msg.points.append(point)
             self.trajectory_pub.publish(msg)
             self.status = "stopping"
-            print("stopping")
+            # print("stopping")
             rospy.sleep(duration)
         else:
             self.status = "stop"
-            print("stop")
+            # print("stop")
